@@ -1,0 +1,27 @@
+services:
+  member-db:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: member
+      POSTGRES_USER: member
+      POSTGRES_PASSWORD: member
+    ports:
+      - "15432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U member -d member"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+  group-db:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: group
+      POSTGRES_USER: group
+      POSTGRES_PASSWORD: group
+    ports:
+      - "15433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U group -d group"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
