@@ -1,7 +1,5 @@
 package dev.task.member.api
 
-import dev.task.group.api.Permission
-import dev.task.group.api.Pricing
 import java.time.LocalDateTime
 import kotlin.test.Test
 import kotlin.test.assertEquals

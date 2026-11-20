@@ -1,1 +1,1 @@
-dependencies { api(project(":group-api")) }
+// deps configured in root build.gradle.kts

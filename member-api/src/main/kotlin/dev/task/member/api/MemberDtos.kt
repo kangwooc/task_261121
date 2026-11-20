@@ -2,8 +2,6 @@ package dev.task.member.api
 
 import com.fasterxml.jackson.annotation.JsonFormat
 import com.fasterxml.jackson.annotation.JsonInclude
-import dev.task.group.api.Permission
-import dev.task.group.api.Pricing
 import java.time.LocalDateTime
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
