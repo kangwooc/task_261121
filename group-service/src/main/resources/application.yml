@@ -17,3 +17,5 @@ spring:
   threads:
     virtual:
       enabled: true
+app:
+  time-zone: Asia/Seoul
