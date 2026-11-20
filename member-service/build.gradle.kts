@@ -1,4 +1,5 @@
 dependencies {
+    implementation(project(":member-api"))
     implementation(project(":group-api"))
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
     implementation("org.springframework.boot:spring-boot-starter-flyway")
