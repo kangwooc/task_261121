@@ -24,6 +24,19 @@ subprojects {
     val bom = rootProject.libs.spring.boot.dependencies
     dependencies { add("implementation", platform(bom)) }
 
+    if (name.endsWith("-api")) {
+        apply(plugin = "java-library")
+        dependencies {
+            add("api", platform(bom))
+            add("api", "org.springframework:spring-web")
+            add("api", "com.fasterxml.jackson.core:jackson-annotations")
+            add("testImplementation", "tools.jackson.module:jackson-module-kotlin")
+            add("testImplementation", "tools.jackson.core:jackson-databind")
+            add("testImplementation", "org.jetbrains.kotlin:kotlin-test-junit5")
+            add("testRuntimeOnly", "org.junit.platform:junit-platform-launcher")
+        }
+    }
+
     if (name.endsWith("-service")) {
         apply(plugin = "org.springframework.boot")
         apply(plugin = "org.jetbrains.kotlin.plugin.spring")
