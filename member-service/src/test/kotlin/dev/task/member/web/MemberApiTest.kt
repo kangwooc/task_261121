@@ -140,7 +140,7 @@ class MemberApiTest {
         "pagination=cursor&page=1",
         "size=0", "size=101", "size=abc",
         "sort=email,asc",
-        "page=-1",
+        "page=-1", "page=2147483647", "page=30000000&size=100",
         "pagination=cursor&cursor=%21%21%21",
         "pagination=cursor&sort=name,desc&cursor=eyJuIjoieCIsInIiOjEsImkiOiJhYWFhYWFhYWFhIiwiZCI6IkFTQyJ9",
         "pagination=bogus",
@@ -198,5 +198,26 @@ class MemberApiTest {
         assertEquals(0, ds.hikariPoolMXBean.activeConnections)
         assertEquals(200, call.get().first)
         assertEquals(1, groupCalls)
+    }
+
+    @Test
+    fun unknownPathIs404ProblemJson() {
+        val r = client.get().uri("/api/member/").retrieve().toEntity(String::class.java)
+        assertEquals(404, r.statusCode.value())
+        assertTrue(r.headers.contentType.toString().startsWith("application/problem+json"))
+        val body = mapper.readTree(r.body)
+        assertEquals("NOT_FOUND", body["code"].asString())
+        assertTrue(body.has("traceId"))
+        assertEquals(0, groupCalls)
+    }
+
+    @Test
+    fun postIs405ProblemJson() {
+        val r = client.post().uri("/api/members").retrieve().toEntity(String::class.java)
+        assertEquals(405, r.statusCode.value())
+        val body = mapper.readTree(r.body)
+        assertEquals("METHOD_NOT_ALLOWED", body["code"].asString())
+        assertTrue(body.has("traceId"))
+        assertEquals(0, groupCalls)
     }
 }

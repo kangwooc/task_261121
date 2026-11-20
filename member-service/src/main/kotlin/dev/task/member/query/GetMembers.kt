@@ -24,6 +24,7 @@ data class GetMembersQuery(val size: Int, val direction: SortDirection, val pagi
                 "offset" -> {
                     if (cursor != null) throw InvalidRequestException("cursor is only allowed with pagination=cursor")
                     if ((page ?: 0) < 0) throw InvalidRequestException("page must be >= 0")
+                    if ((page ?: 0).toLong() * s > Int.MAX_VALUE) throw InvalidRequestException("page is too large")
                     Pagination.Offset(page ?: 0)
                 }
                 "cursor" -> {

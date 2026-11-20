@@ -95,6 +95,29 @@ class GroupApiTest {
     }
 
     @Test
+    fun unknownPathIs404ProblemJson() {
+        val ex = assertFailsWith<HttpClientErrorException> {
+            RestClient.create("http://127.0.0.1:$port").get().uri("/api/nope").retrieve().toBodilessEntity()
+        }
+        assertEquals(404, ex.statusCode.value())
+        assertTrue(ex.responseHeaders!!.contentType.toString().startsWith("application/problem+json"))
+        val body = JsonMapper.builder().build().readTree(ex.responseBodyAsString)
+        assertEquals("NOT_FOUND", body["code"].asString())
+        assertTrue(body.has("traceId"))
+    }
+
+    @Test
+    fun postIs405ProblemJson() {
+        val ex = assertFailsWith<HttpClientErrorException> {
+            RestClient.create("http://127.0.0.1:$port").post().uri("/api/group").retrieve().toBodilessEntity()
+        }
+        assertEquals(405, ex.statusCode.value())
+        val body = JsonMapper.builder().build().readTree(ex.responseBodyAsString)
+        assertEquals("METHOD_NOT_ALLOWED", body["code"].asString())
+        assertTrue(body.has("traceId"))
+    }
+
+    @Test
     fun controllerImplementsContract() {
         assertTrue(GroupApi::class.java.isAssignableFrom(GroupController::class.java))
     }
