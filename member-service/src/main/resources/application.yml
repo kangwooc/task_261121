@@ -1,0 +1,20 @@
+server:
+  port: 8080
+spring:
+  application:
+    name: member-service
+  datasource:
+    url: jdbc:postgresql://localhost:15432/member
+    username: member
+    password: member
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    locations: classpath:db/migration,classpath:db/seed
+  threads:
+    virtual:
+      enabled: true
+app:
+  time-zone: Asia/Seoul
