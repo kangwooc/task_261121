@@ -1,0 +1,8 @@
+{
+  "hooks": {
+    "Stop": [{ "hooks": [{ "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/save-transcript.sh" }] }],
+    "SubagentStop": [{ "hooks": [{ "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/save-transcript.sh" }] }],
+    "PreCompact": [{ "hooks": [{ "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/save-transcript.sh" }] }],
+    "SessionEnd": [{ "hooks": [{ "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/save-transcript.sh" }] }]
+  }
+}

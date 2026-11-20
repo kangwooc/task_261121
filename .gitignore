@@ -1,0 +1,8 @@
+.playwright-mcp/
+.claude/settings.local.json
+.gradle/
+build/
+.idea/
+*.iml
+.DS_Store
+.superpowers/
