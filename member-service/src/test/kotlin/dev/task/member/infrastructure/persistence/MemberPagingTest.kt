@@ -109,7 +109,8 @@ class MemberPagingTest @Autowired constructor(
     fun microsecondDifferenceSurvivesCursorPaging() {
         // size 1 forces a cursor boundary between the two Alice Kim rows that differ by 1 microsecond
         val ids = cursorIds(1, SortDirection.ASC)
-        assertEquals(ids.indexOf("a9pwo15d0x") + 1, ids.indexOf("c77u434yrz"))
+        // time order is opposite to id order, so dropping registeredAt from the sort key would fail
+        assertEquals(ids.indexOf("c77u434yrz") + 1, ids.indexOf("a9pwo15d0x"))
     }
 
     @Test

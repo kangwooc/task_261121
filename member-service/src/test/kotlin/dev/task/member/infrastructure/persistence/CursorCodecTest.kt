@@ -35,13 +35,18 @@ class CursorCodecTest {
     @ParameterizedTest
     @ValueSource(strings = [
         """{"n":"a","r":1,"d":"ASC"}""",                         // missing i
-        """{"r":1,"i":"x","d":"ASC"}""",                         // missing n
-        """{"n":"a","r":"2025-01-01","i":"x","d":"ASC"}""",      // r string
-        """{"n":"a","r":1.5,"i":"x","d":"ASC"}""",               // r not integral
-        """{"n":1,"r":1,"i":"x","d":"ASC"}""",                   // n number
-        """{"n":"a","r":1,"i":"x","d":"SIDEWAYS"}""",            // bad direction
-        """{"n":"a","r":1,"i":"x"}""",                           // missing d
-        """{"n":null,"r":1,"i":"x","d":"ASC"}""",
+        """{"r":1,"i":"abcde12345","d":"ASC"}""",                         // missing n
+        """{"n":"a","r":"2025-01-01","i":"abcde12345","d":"ASC"}""",      // r string
+        """{"n":"a","r":1.5,"i":"abcde12345","d":"ASC"}""",               // r not integral
+        """{"n":1,"r":1,"i":"abcde12345","d":"ASC"}""",                   // n number
+        """{"n":"a","r":1,"i":"abcde12345","d":"SIDEWAYS"}""",            // bad direction
+        """{"n":"a","r":1,"i":"abcde12345"}""",                           // missing d
+        """{"n":null,"r":1,"i":"abcde12345","d":"ASC"}""",
+        """{"n":"a\u0000","r":1,"i":"abcde12345","d":"ASC"}""",             // NUL in name
+        """{"n":"a","r":-9000000000000000000,"i":"abcde12345","d":"ASC"}""", // below timestamptz range
+        """{"n":"a","r":9000000000000000000,"i":"abcde12345","d":"ASC"}""",  // above range
+        """{"n":"a","r":1,"i":"x","d":"ASC"}""",                             // id not ^[a-z0-9]{10}$
+        """{"n":"a","r":1,"i":"ABCDE12345","d":"ASC"}""",
     ])
     fun rejectsStructurallyInvalidPayloads(json: String) {
         assertThrows(b64(json))
