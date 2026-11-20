@@ -1,7 +1,12 @@
 dependencies {
+    implementation(project(":group-api"))
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
     implementation("org.springframework.boot:spring-boot-starter-flyway")
     implementation("org.flywaydb:flyway-database-postgresql")
+    implementation("org.springframework.boot:spring-boot-starter-restclient")
+    implementation("org.springframework.boot:spring-boot-starter-micrometer-metrics")
+    implementation(libs.resilience4j.circuitbreaker)
+    implementation(libs.resilience4j.micrometer)
     implementation("org.jetbrains.kotlin:kotlin-reflect")
     implementation("tools.jackson.module:jackson-module-kotlin")
     runtimeOnly("org.postgresql:postgresql")
@@ -9,4 +14,6 @@ dependencies {
     testImplementation("org.springframework.boot:spring-boot-testcontainers")
     testImplementation("org.testcontainers:testcontainers-postgresql")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
+    testImplementation(libs.mockwebserver3)
+    testImplementation(libs.mockwebserver3.junit5)
 }

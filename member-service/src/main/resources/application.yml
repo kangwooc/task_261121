@@ -16,5 +16,14 @@ spring:
   threads:
     virtual:
       enabled: true
+  http:
+    clients:
+      imperative:
+        factory: jdk
+    serviceclient:
+      group:
+        base-url: http://127.0.0.1:8081
+        connect-timeout: 500ms
+        read-timeout: 1s
 app:
   time-zone: Asia/Seoul
