@@ -110,7 +110,10 @@ class GroupServiceGateway(
             record(started, "success")
             return result
         } catch (e: RetryException) { // every failure, retried or not, arrives wrapped; cause = last attempt's exception
-            throw fail(op, if (timedOut.get()) RETRY_BUDGET_EXCEEDED else classify(e.cause), attempts.get(), started, e.cause)
+            // RetryTemplate checks the timeout before noticing maxRetries is used up, so the timeout callback also
+            // fires after the last allowed attempt. Budget-exceeded only if a retry was actually skipped.
+            val skippedRetry = timedOut.get() && attempts.get() <= props.retry.maxRetries
+            throw fail(op, if (skippedRetry) RETRY_BUDGET_EXCEEDED else classify(e.cause), attempts.get(), started, e.cause)
         } finally {
             inUse.decrementAndGet()
             permits.release()

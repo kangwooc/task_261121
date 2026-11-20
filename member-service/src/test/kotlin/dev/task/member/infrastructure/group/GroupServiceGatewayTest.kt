@@ -31,6 +31,7 @@ import org.springframework.context.annotation.Import
 import org.springframework.test.context.DynamicPropertyRegistry
 import org.springframework.test.context.DynamicPropertySource
 import org.springframework.test.context.TestPropertySource
+import org.springframework.web.client.ResourceAccessException
 import java.net.ServerSocket
 import java.time.Duration
 import java.util.concurrent.CompletableFuture
@@ -115,18 +116,20 @@ class GroupServiceGatewayTest : MockGroupServerSupport() {
     fun slowHeadersFailWithinBudget() = within4s {
         server.dispatcher = always(json(200, DETAIL).headersDelay(5, SECONDS).build())
         val (e, ms) = failureOf { gateway.findDetail("a000000001") }
-        assertTrue(e.stage == READ_TIMEOUT || e.stage == RETRY_BUDGET_EXCEEDED, "stage=${e.stage}")
+        assertEquals(READ_TIMEOUT, e.stage) // retries exhausted, none skipped -> not RETRY_BUDGET_EXCEEDED
+        assertEquals(2, e.attempts)
         assertTrue(ms < 3000, "elapsed=$ms")
-        assertTrue(requests <= 2, "requests=$requests")
+        assertEquals(2, requests)
     }
 
     @Test
     fun slowBodyFailsWithinBudget() = within4s {
         server.dispatcher = always(json(200, DETAIL).bodyDelay(5, SECONDS).build())
         val (e, ms) = failureOf { gateway.findDetail("a000000001") }
-        assertTrue(e.stage == READ_TIMEOUT || e.stage == RETRY_BUDGET_EXCEEDED, "stage=${e.stage}")
+        assertEquals(READ_TIMEOUT, e.stage) // retries exhausted, none skipped -> not RETRY_BUDGET_EXCEEDED
+        assertEquals(2, e.attempts)
         assertTrue(ms < 3000, "elapsed=$ms")
-        assertTrue(requests <= 2, "requests=$requests")
+        assertEquals(2, requests)
         // each slow-body attempt is a recorded (timeout) failure, not an unrecorded contract error
         assertEquals(e.attempts, breaker.metrics.numberOfFailedCalls)
     }
@@ -220,6 +223,7 @@ class GroupServiceGatewayTest : MockGroupServerSupport() {
     properties = [
         "app.group-client.concurrency-limit=1",
         "app.group-client.circuit-breaker.wait-duration-in-open-state=200ms",
+        "app.group-client.retry.timeout=500ms", // below one read-timeout (1s): a timed-out first attempt skips the retry
     ],
 )
 class TunedGroupServiceGatewayTest : MockGroupServerSupport() {
@@ -241,6 +245,17 @@ class TunedGroupServiceGatewayTest : MockGroupServerSupport() {
         assertTrue(ms < 100, "elapsed=$ms")
         assertEquals(1, requests)
         assertNotNull(first.get())
+    }
+
+    @Test
+    fun retrySkippedWhenBudgetSpentIsRetryBudgetExceeded() = within4s {
+        server.dispatcher = always(json(200, DETAIL).headersDelay(5, SECONDS).build())
+        val (e, ms) = failureOf { gateway.findDetail("a000000001") }
+        assertEquals(RETRY_BUDGET_EXCEEDED, e.stage)
+        assertEquals(1, e.attempts)
+        assertEquals(1, requests)
+        assertTrue(e.cause is ResourceAccessException, "cause=${e.cause}")
+        assertTrue(ms < 1500, "elapsed=$ms")
     }
 
     @Test
