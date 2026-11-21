@@ -63,7 +63,7 @@ docker compose up -d                  # member-db :15432, group-db :15433
 ```bash
 # 목록: offset 방식(기본)
 curl -s 'http://localhost:8080/api/members?size=3&page=0&sort=name,asc' | jq
-# → {"members":[{"id":"…","name":"…","group":"Beta Squad","permission":"Viewer"},…],
+# → {"members":[{"id":"…","name":"강하늘","group":"…","permission":"…"},…],
 #    "page":{"number":0,"size":3,"totalElements":50,"totalPages":17}}
 
 # 목록: cursor 방식. 첫 페이지는 cursor 없이 호출하고, 다음 페이지는 응답의 cursor.next를 넘긴다
@@ -108,7 +108,7 @@ curl -s 'http://127.0.0.1:8081/api/group?memberId=27ysni0g1i' | jq
 | `GET /api/groups/summary?memberIds=a,b` | 1..100개, 중복 제거. `totalMemberCount`는 그룹 전체 멤버 수, `members`는 요청한 ID 중 그 그룹 소속인 멤버만. 그룹이 없는 ID는 응답에 나오지 않는다 |
 | `GET /api/group?memberId=x` | 소속이 없으면 404 `MEMBER_GROUP_NOT_FOUND` |
 
-- 정렬 키는 `name → registeredAt → id`이고 세 컬럼 모두 요청 방향을 따른다. 동명이인에 가입 시각까지 같아도 순서가 결정적이다.
+- 정렬 키는 `name → registeredAt → id`이고 세 컬럼 모두 요청 방향을 따른다. 동명이인에 가입 시각까지 같아도 순서가 결정적이다. 이름은 한국어 사전순(ICU `ko-x-icu`)이다.
 - 목록 한 페이지당 그룹 서비스는 **배치 1건**(`/api/groups/summary`)으로 호출한다. 재시도를 포함해도 HTTP 시도는 최대 2회다. 결과가 0건인 페이지는 그룹 서비스를 호출하지 않는다.
 - 날짜는 `"yyyy-MM-dd HH:mm"` 형식이다. DB에는 `timestamptz`로 저장하고 `app.time-zone`(기본 `Asia/Seoul`)으로 렌더링한다.
 
@@ -309,7 +309,7 @@ histogram_quantile(0.99,
 
 ## 9. 알려진 한계
 
-- **이름 정렬은 DB 기본 collation(`en_US.utf8`, glibc)을 따른다.** 그래서 한글 이름의 순서가 사전순과 다르게 보일 수 있다. 같은 collation으로 정렬과 keyset 비교를 하므로 페이징의 누락/중복은 없다. 사전순이 필요하면 `name` 컬럼과 인덱스에 ICU collation(예: `COLLATE "ko-x-icu"`)을 지정하는 마이그레이션을 추가한다.
+- 참고: `members.name` 컬럼은 ICU collation `ko-x-icu`를 쓴다. 그래서 한글 이름이 사전순(가나다)으로 정렬되고, 한글 뒤에 라틴 문자 이름이 온다. 정렬(`ORDER BY`), keyset 비교, 정렬 인덱스가 모두 같은 collation을 쓴다. DB 기본값(`en_US.utf8`, glibc)으로는 한글 순서가 사전순이 되지 않았다.
 - 연결 단계 지연(SYN에 응답이 없는 경우)은 별도 테스트가 없다. 연결 거부만 테스트했다. connect timeout(0.5s)은 설정으로 걸려 있다.
 - 서킷 브레이커와 동시 호출 상한은 인스턴스별이다. 여러 인스턴스로 늘리면 전체 상한은 인스턴스 수에 비례한다.
 

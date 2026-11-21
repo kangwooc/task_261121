@@ -13,6 +13,8 @@ import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase
 import org.springframework.context.annotation.Import
 import org.springframework.jdbc.core.JdbcTemplate
+import java.text.Collator
+import java.util.Locale
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
@@ -77,6 +79,17 @@ class MemberPagingTest @Autowired constructor(
     @CsvSource("ASC,3", "ASC,7", "DESC,3", "DESC,7")
     fun offsetAndCursorProduceIdenticalOrder(dir: SortDirection, size: Int) {
         assertEquals(offsetIds(size, dir), cursorIds(size, dir))
+    }
+
+    @ParameterizedTest
+    @CsvSource("ASC", "DESC")
+    fun hangulNamesSortInKoreanDictionaryOrder(dir: SortDirection) {
+        val names = repo.findPage(50, dir, Pagination.Offset(0)).rows.map { it.name }
+        val hangul = names.filter { n -> n.all { it in '\uAC00'..'\uD7A3' } }
+        val dictionary = hangul.sortedWith(Collator.getInstance(Locale.KOREAN))
+        assertEquals(if (dir == SortDirection.ASC) dictionary else dictionary.reversed(), hangul)
+        val triple = listOf("강하늘", "김민수", "나은").let { if (dir == SortDirection.ASC) it else it.reversed() }
+        assertEquals(triple, names.filter { it in triple }.distinct())
     }
 
     @Test
