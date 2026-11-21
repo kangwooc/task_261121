@@ -4,7 +4,6 @@ import dev.task.member.api.CursorInfo
 import dev.task.member.api.MemberListResponse
 import dev.task.member.api.MemberSummary
 import dev.task.member.api.PageInfo
-import dev.task.member.api.Permission
 import dev.task.member.infrastructure.persistence.CursorCodec
 import dev.task.member.infrastructure.persistence.MemberReadRepository
 import dev.task.member.query.port.GroupReader
@@ -48,7 +47,7 @@ class GetMembersHandler(private val repo: MemberReadRepository, private val grou
         val summaries = if (slice.rows.isEmpty()) emptyMap() else groups.findSummaries(slice.rows.map { it.id })
         val members = slice.rows.map {
             val g = summaries[it.id]
-            MemberSummary(it.id, it.name, g?.groupName, g?.let { s -> Permission.valueOf(s.permission.name) })
+            MemberSummary(it.id, it.name, g?.groupName, g?.permission)
         }
         return MemberListResponse(
             members,

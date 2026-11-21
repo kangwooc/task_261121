@@ -10,6 +10,7 @@ import dev.task.member.infrastructure.group.GroupCallStage.RETRY_BUDGET_EXCEEDED
 import dev.task.member.infrastructure.group.GroupCallStage.UPSTREAM_5XX
 import dev.task.member.infrastructure.group.GroupCallStage.UPSTREAM_CONTRACT_ERROR
 import dev.task.member.query.port.GroupReader
+import dev.task.member.query.port.MemberGroupDetail
 import dev.task.member.query.port.MemberGroupSummary
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException
 import io.github.resilience4j.circuitbreaker.CircuitBreaker
@@ -79,15 +80,16 @@ class GroupServiceGateway(
         if (requested.isEmpty()) return emptyMap()
         return call("summaries") {
             api.getGroupSummaries(requested.toList()).groups
-                .flatMap { g -> g.members.filter { it.memberId in requested }.map { it.memberId to MemberGroupSummary(g.groupName, it.permission) } }
+                .flatMap { g -> g.members.filter { it.memberId in requested }.map { it.memberId to MemberGroupSummary(g.groupName, it.permission.toMemberApi()) } }
                 .toMap()
         }
     }
 
-    override fun findDetail(memberId: String): MemberGroupDetailResponse? = call("detail") {
+    override fun findDetail(memberId: String): MemberGroupDetail? = call("detail") {
         try {
             // An empty 200 body comes back as null from the proxy despite the non-null contract type.
-            (api.getMemberGroup(memberId) as MemberGroupDetailResponse?) ?: throw IllegalStateException("empty group detail body")
+            val d = (api.getMemberGroup(memberId) as MemberGroupDetailResponse?) ?: throw IllegalStateException("empty group detail body")
+            MemberGroupDetail(d.groupId, d.groupName, d.registeredDate, d.pricing.toMemberApi(), d.permission.toMemberApi())
         } catch (e: HttpClientErrorException.NotFound) {
             // Inside the breaker on purpose: "no group" must be recorded as a success.
             if (e.getResponseBodyAs(ProblemDetail::class.java)?.properties?.get("code") == "MEMBER_GROUP_NOT_FOUND") null else throw e

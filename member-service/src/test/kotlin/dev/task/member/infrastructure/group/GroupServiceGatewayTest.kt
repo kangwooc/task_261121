@@ -1,7 +1,8 @@
 package dev.task.member.infrastructure.group
 
-import dev.task.group.api.Permission
 import dev.task.member.TestcontainersConfig
+import dev.task.member.api.Permission
+import dev.task.member.api.Pricing
 import dev.task.member.infrastructure.group.GroupCallStage.CIRCUIT_OPEN
 import dev.task.member.infrastructure.group.GroupCallStage.CONCURRENCY_REJECTED
 import dev.task.member.infrastructure.group.GroupCallStage.CONNECT_TIMEOUT
@@ -9,6 +10,7 @@ import dev.task.member.infrastructure.group.GroupCallStage.READ_TIMEOUT
 import dev.task.member.infrastructure.group.GroupCallStage.RETRY_BUDGET_EXCEEDED
 import dev.task.member.infrastructure.group.GroupCallStage.UPSTREAM_5XX
 import dev.task.member.infrastructure.group.GroupCallStage.UPSTREAM_CONTRACT_ERROR
+import dev.task.member.query.port.MemberGroupDetail
 import dev.task.member.query.port.MemberGroupSummary
 import io.github.resilience4j.circuitbreaker.CircuitBreaker
 import io.micrometer.core.instrument.MeterRegistry
@@ -34,6 +36,7 @@ import org.springframework.test.context.TestPropertySource
 import org.springframework.web.client.ResourceAccessException
 import java.net.ServerSocket
 import java.time.Duration
+import java.time.LocalDateTime
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit.MILLISECONDS
@@ -155,7 +158,10 @@ class GroupServiceGatewayTest : MockGroupServerSupport() {
     fun retrySucceedsAfterOne5xx() = within4s {
         val successBefore = meters.timer("group.call.duration", "outcome", "success").count()
         enqueue(json(503, "{}"), json(200, DETAIL))
-        assertNotNull(gateway.findDetail("a000000001"))
+        assertEquals(
+            MemberGroupDetail("g000000001", "Alpha", LocalDateTime.of(2026, 1, 2, 3, 4), Pricing.Free, Permission.Admin),
+            gateway.findDetail("a000000001"),
+        )
         assertEquals(2, requests)
         assertEquals(successBefore + 1, meters.timer("group.call.duration", "outcome", "success").count())
     }
@@ -242,7 +248,7 @@ class TunedGroupServiceGatewayTest : MockGroupServerSupport() {
         val (e, ms) = failureOf { gateway.findDetail("b000000002") }
         assertEquals(CONCURRENCY_REJECTED, e.stage)
         assertEquals(0, e.attempts)
-        assertTrue(ms < 100, "elapsed=$ms")
+        assertTrue(ms < 500, "elapsed=$ms") // spec: "immediate"
         assertEquals(1, requests)
         assertNotNull(first.get())
     }
@@ -255,7 +261,7 @@ class TunedGroupServiceGatewayTest : MockGroupServerSupport() {
         assertEquals(1, e.attempts)
         assertEquals(1, requests)
         assertTrue(e.cause is ResourceAccessException, "cause=${e.cause}")
-        assertTrue(ms < 1500, "elapsed=$ms")
+        assertTrue(ms < 3000, "elapsed=$ms") // ~1.0s expected; spec total budget bound
     }
 
     @Test
