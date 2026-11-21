@@ -4,17 +4,22 @@ import dev.task.group.TestcontainersConfig
 import dev.task.group.api.Permission
 import dev.task.group.api.Pricing
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.ValueSource
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase
 import org.springframework.context.annotation.Import
+import org.springframework.dao.DataIntegrityViolationException
+import org.springframework.jdbc.core.JdbcTemplate
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 
 @DataJpaTest
 @Import(TestcontainersConfig::class, GroupReadRepository::class)
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
-class GroupReadRepositoryTest @Autowired constructor(private val repo: GroupReadRepository) {
+class GroupReadRepositoryTest @Autowired constructor(private val repo: GroupReadRepository, private val jdbc: JdbcTemplate) {
     private val admin = "27ysni0g1i"      // Alpha Team, Admin
     private val editor = "itn3xvk9tf"     // Alpha Team, Editor
     private val ungrouped = "pq12td4qds"  // seed id #46
@@ -43,5 +48,16 @@ class GroupReadRepositoryTest @Autowired constructor(private val repo: GroupRead
     @Test
     fun findMemberGroupReturnsNullForUngrouped() {
         assertNull(repo.findMemberGroup(ungrouped))
+    }
+
+    @ParameterizedTest
+    @ValueSource(
+        strings = [
+            "insert into groups(id,name,pricing,registered_at) values ('BAD','x','Free',now())",
+            "insert into group_members(member_id,group_id,permission,joined_at) values ('ABCDEFGHIJ','g1a2b3c4d5','Viewer',now())",
+        ],
+    )
+    fun idCheckConstraintsRejectMalformedIds(sql: String) {
+        assertFailsWith<DataIntegrityViolationException> { jdbc.update(sql) }
     }
 }

@@ -13,8 +13,10 @@ LOG="$LOG_DIR/bootRun.log"
 GRADLE_PID=""
 STARTED_DB=""
 
+port_open() { (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null; }
+
 for port in 8080 8081 9080 9081; do
-  if (exec 3<>"/dev/tcp/127.0.0.1/$port") 2>/dev/null; then echo "port $port is already in use; stop it first" >&2; exit 1; fi
+  if port_open "$port"; then echo "port $port is already in use; stop it first" >&2; exit 1; fi
 done
 
 cleanup() {
@@ -23,7 +25,14 @@ cleanup() {
     kill "$GRADLE_PID" 2>/dev/null || true
     wait "$GRADLE_PID" 2>/dev/null || true
     # The Gradle daemon stops both app JVMs once the client is gone; give them a moment to release the ports.
-    for _ in $(seq 1 20); do (exec 3<>/dev/tcp/127.0.0.1/8080) 2>/dev/null || break; sleep 1; done
+    # If one is still bound, kill its listener: these ports were verified free above, so it can only be our bootRun JVM.
+    for port in 8080 8081; do
+      for _ in $(seq 1 20); do port_open "$port" || break; sleep 1; done
+      if port_open "$port"; then
+        echo "port $port still bound after Gradle exit; killing its listener" >&2
+        lsof -ti "tcp:$port" -sTCP:LISTEN | xargs kill 2>/dev/null || true
+      fi
+    done
   fi
   # Only tear down the DBs if this script started them.
   if [ -n "$STARTED_DB" ]; then docker compose down -v >/dev/null 2>&1 || true; fi
@@ -34,14 +43,14 @@ trap cleanup EXIT
 [ -z "$(docker compose ps -q)" ] && STARTED_DB=1
 docker compose up -d --wait
 
-# One Gradle invocation runs both apps in parallel (two concurrent ./gradlew calls would contend on the project lock).
+# One --parallel Gradle invocation runs both apps: simpler to start, wait on and stop than two background ./gradlew processes.
 echo "starting services, log: $LOG"
 ./gradlew --parallel :group-service:bootRun :member-service:bootRun >"$LOG" 2>&1 &
 GRADLE_PID=$!
 
 wait_ready() { # $1 = management port
   for _ in $(seq 1 90); do
-    curl -fs "http://127.0.0.1:$1/actuator/health/readiness" >/dev/null && return 0
+    curl -fs -m 10 "http://127.0.0.1:$1/actuator/health/readiness" >/dev/null && return 0
     kill -0 "$GRADLE_PID" 2>/dev/null || { tail -n 40 "$LOG" >&2; return 1; }
     sleep 1
   done
@@ -51,7 +60,7 @@ wait_ready 9081
 wait_ready 9080
 
 check() { # $1 = label, $2 = expected status, $3 = url, $4 = jq assertion on body
-  body=$(curl -s -o - -w '\n%{http_code}' "$3")
+  body=$(curl -s -m 10 -o - -w '\n%{http_code}' "$3")
   code=${body##*$'\n'}
   body=${body%$'\n'*}
   if [ "$code" = "$2" ] && jq -e "$4" >/dev/null <<<"$body"; then echo "ok   $1"; else echo "FAIL $1 (status $code): $body" >&2; return 1; fi

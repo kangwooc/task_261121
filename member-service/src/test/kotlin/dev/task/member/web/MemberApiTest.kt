@@ -23,7 +23,9 @@ import tools.jackson.databind.JsonNode
 import tools.jackson.databind.json.JsonMapper
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit.MILLISECONDS
+import java.util.concurrent.TimeUnit.SECONDS
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 private const val UNKNOWN = "zzzzzzzzzz"
@@ -194,7 +196,7 @@ class MemberApiTest {
     fun dbConnectionIsReleasedDuringGroupCall() {
         server.enqueue(json(200, """{"groups":[]}""").headersDelay(800, MILLISECONDS).build())
         val call = CompletableFuture.supplyAsync { get("/api/members?size=2") }
-        Thread.sleep(400)
+        assertNotNull(server.takeRequest(2, SECONDS), "group call never arrived") // its response is still delayed
         assertEquals(0, ds.hikariPoolMXBean.activeConnections)
         assertEquals(200, call.get().first)
         assertEquals(1, groupCalls)
@@ -217,6 +219,14 @@ class MemberApiTest {
         assertEquals(200, status)
         assertTrue(body["paths"].has("/api/members"))
         assertTrue(body["paths"].has("/api/member/{memberId}"))
+        listOf("/paths/~1api~1members/get/responses/400", "/paths/~1api~1members/get/responses/503",
+            "/paths/~1api~1member~1{memberId}/get/responses/404").forEach { assertProblemJson(body.at(it), it) }
+    }
+
+    private fun assertProblemJson(response: JsonNode, at: String) {
+        val content = response["content"]
+        assertEquals(setOf("application/problem+json"), content.propertyNames().toSet(), at)
+        assertTrue(content.at("/application~1problem+json/schema/\$ref").asString().endsWith("/ProblemDetail"), at)
     }
 
     @Test

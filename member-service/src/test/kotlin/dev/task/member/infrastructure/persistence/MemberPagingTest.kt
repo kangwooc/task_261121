@@ -12,6 +12,7 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase
 import org.springframework.context.annotation.Import
+import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.jdbc.core.JdbcTemplate
 import java.text.Collator
 import java.util.Locale
@@ -130,5 +131,12 @@ class MemberPagingTest @Autowired constructor(
     fun findByIdWorks() {
         assertNotNull(repo.findById("27ysni0g1i"))
         assertNull(repo.findById("zzzzzzzzzz"))
+    }
+
+    @Test
+    fun idCheckConstraintRejectsMalformedId() {
+        assertFailsWith<DataIntegrityViolationException> {
+            jdbc.update("insert into members(id,name,email,address,registered_at) values ('ABCDEFGHIJ','x','x@example.com','x',now())")
+        }
     }
 }

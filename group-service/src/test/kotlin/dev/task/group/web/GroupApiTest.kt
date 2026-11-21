@@ -122,6 +122,12 @@ class GroupApiTest {
         val body = mapper.readTree(RestClient.create("http://127.0.0.1:$port").get().uri("/v3/api-docs").retrieve().body(String::class.java))
         assertTrue(body["paths"].has("/api/groups/summary"))
         assertTrue(body["paths"].has("/api/group"))
+        listOf("/paths/~1api~1groups~1summary/get/responses/400", "/paths/~1api~1group/get/responses/400",
+            "/paths/~1api~1group/get/responses/404").forEach {
+            val content = body.at("$it/content")
+            assertEquals(setOf("application/problem+json"), content.propertyNames().toSet(), it)
+            assertTrue(content.at("/application~1problem+json/schema/\$ref").asString().endsWith("/ProblemDetail"), it)
+        }
     }
 
     @Test

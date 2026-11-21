@@ -1,5 +1,5 @@
 create table members (
-    id varchar(10) primary key,
+    id varchar(10) primary key check (id ~ '^[a-z0-9]{10}$'),
     name varchar collate "ko-x-icu" not null, -- ICU Korean: dictionary order; ORDER BY and keyset compare share it
     email varchar not null unique,
     address varchar not null,

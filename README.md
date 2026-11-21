@@ -28,9 +28,9 @@ scripts/smoke.sh
 스크립트는 다음 순서로 동작한다.
 
 1. DB 두 개를 띄운다(`docker compose up -d --wait`).
-2. `./gradlew --parallel :group-service:bootRun :member-service:bootRun`으로 두 서비스를 실행한다. Gradle을 한 번만 호출하는 이유는, `./gradlew`를 두 번 동시에 실행하면 같은 프로젝트의 Gradle 락을 두고 경합하기 때문이다. 이후 관리 포트의 `/actuator/health/readiness`를 최대 90초 동안 polling한다.
+2. `./gradlew --parallel :group-service:bootRun :member-service:bootRun`으로 두 서비스를 실행한다. 백그라운드 프로세스 하나로 띄우고 정리하는 편이 단순해서 Gradle을 한 번(`--parallel`)만 호출한다. 이후 관리 포트의 `/actuator/health/readiness`를 최대 90초 동안 polling한다.
 3. 실제 HTTP로 4가지를 확인한다. 목록 `size=5` → 5건, cursor 첫 페이지 → `hasNext`, 그룹 없는 멤버 상세 → `group == null`, 잘못된 ID → 400.
-4. 종료 시(성공·실패 무관) trap이 Gradle을 종료하고 앱 JVM이 내려간 것을 확인한다. **DB는 스크립트가 직접 띄운 경우에만** `docker compose down -v`로 정리한다. 이미 떠 있던 DB 컨테이너는 그대로 둔다.
+4. 종료 시(성공·실패 무관) trap이 Gradle을 종료하고 8080/8081이 비워질 때까지 기다린다. 기다린 뒤에도 포트가 잡혀 있으면 그 포트의 listener(`lsof -ti tcp:PORT`)를 종료한다. 두 포트는 시작 전에 비어 있음을 확인했으므로 대상은 스크립트가 띄운 앱 JVM뿐이다. **DB는 스크립트가 직접 띄운 경우에만** `docker compose down -v`로 정리한다. 이미 떠 있던 DB 컨테이너는 그대로 둔다.
 
 앱 로그는 임시 디렉터리에 저장되고 경로가 출력된다. 실행 시작 전에 앱 포트(8080/8081/9080/9081)가 사용 중이면 바로 실패한다.
 
@@ -89,6 +89,7 @@ curl -s 'http://127.0.0.1:8081/api/group?memberId=27ysni0g1i' | jq
 
 - member: `http://localhost:8080/swagger-ui.html`, `http://localhost:8080/v3/api-docs`
 - group: `http://127.0.0.1:8081/swagger-ui.html`, `http://127.0.0.1:8081/v3/api-docs`
+- 오류 응답(400/404/503)은 성공 스키마가 아니라 `application/problem+json` + `ProblemDetail` 스키마로 문서화했다.
 
 ### 테스트
 
@@ -130,7 +131,7 @@ root
 
 - **`*-service` 모듈끼리는 main/test 어느 scope로도 의존하지 않는다.** 서비스 사이에서 공유하는 것은 계약 모듈뿐이고, 호출은 네트워크로만 한다. 그래서 member-service 코드는 group-service의 엔티티, 리포지토리, DB를 import할 방법 자체가 없다. "직접 참조 금지"를 규칙이 아니라 빌드 그래프로 강제한 것이다.
 - 서버와 클라이언트가 **같은 `@HttpExchange` 인터페이스**를 쓴다. group-service의 컨트롤러가 `GroupApi`를 구현하고, member-service는 Boot 4 HTTP Service Client(`@ImportHttpServices(group = "group", types = [GroupApi::class])`)로 같은 인터페이스의 프록시를 만든다. 경로나 파라미터가 바뀌면 양쪽이 컴파일 단계에서 함께 깨진다.
-- `member-api`는 `group-api`에도 의존하지 않는다. `Pricing`/`Permission` enum을 따로 가지고, member-service에서 매핑한다. 그룹 서비스의 내부 계약이 바뀌어도 member의 공개 계약은 바뀌지 않아야 하기 때문이다.
+- `member-api`는 `group-api`에도 의존하지 않는다. `Pricing`/`Permission` enum을 따로 가지고, member-service의 Gateway가 이름 문자열(`valueOf`)이 아니라 exhaustive `when`으로 매핑한다. group-api에 상수가 추가되면 런타임 오류가 아니라 컴파일 오류가 난다. 그룹 서비스의 내부 계약이 바뀌어도 member의 공개 계약은 바뀌지 않아야 하기 때문이다.
 - 실무라면 `*-api`는 사내 저장소에 배포하는 라이브러리다. 과제에서는 Gradle project 의존으로 대신했다.
 - `common` 모듈과 convention plugin은 두지 않았다. 공통 설정은 루트 `build.gradle.kts`와 `gradle/libs.versions.toml`에 있다.
 
@@ -146,10 +147,10 @@ member/
 └── infrastructure/
     ├── persistence/             MemberEntity(테이블 매핑 전용), MemberJpaRepository(DTO projection),
     │                            MemberReadRepository(@Transactional(readOnly = true) 경계)
-    └── group/                   GroupServiceGateway(GroupReader 구현, 탄력성 조합)
+    └── group/                   GroupServiceGateway(GroupReader 구현, 탄력성 조합, group-api → 포트 타입 매핑)
 ```
 
-- 컨트롤러는 Query를 만들어 Handler에 넘긴다. Handler는 그룹을 `GroupReader` 포트로만 조회한다. 그룹 조회 방식이 HTTP에서 캐시나 이벤트 프로젝션으로 바뀌어도 Handler 코드는 그대로다.
+- 컨트롤러는 Query를 만들어 Handler에 넘긴다. Handler는 그룹을 `GroupReader` 포트로만 조회한다. 포트 타입(`MemberGroupSummary`, `MemberGroupDetail`)은 member-api enum만 쓰고, group-api 타입은 Gateway 밖으로 나오지 않는다. 그룹 조회 방식이 HTTP에서 캐시나 이벤트 프로젝션으로 바뀌어도 Handler 코드는 그대로다.
 - 조회 모델은 엔티티가 아니라 **JPQL constructor expression(DTO projection)**으로 바로 만든다. 엔티티를 로딩하지 않으므로 dirty checking이나 지연 로딩이 끼어들지 않는다.
 - **트랜잭션 범위**: Handler에는 트랜잭션을 걸지 않는다. DB 조회(목록 + count)는 `MemberReadRepository`의 read-only 트랜잭션 안에서 끝나고, 커넥션을 반환한 **뒤에** 그룹 서비스를 호출한다. 그룹 호출이 느리거나 재시도되는 동안 DB 커넥션을 붙잡지 않는다. `spring.jpa.open-in-view=false`가 필수인 이유도 이것이다. 테스트로 검증했다: 그룹 호출이 지연되는 동안 Hikari active connection이 0이다.
 - 저장소처럼 구현이 하나뿐이고 바뀔 이유가 없는 곳에는 인터페이스를 두지 않았다.
@@ -215,7 +216,7 @@ finally: release()
 | 헤더 후 느린 본문 | `READ_TIMEOUT`, 2회 시도, 약 2.2s |
 | 예산이 남지 않아 재시도 생략 (`retry.timeout=500ms` 설정) | `RETRY_BUDGET_EXCEEDED`, 1회 시도, 약 1.0s |
 | 서킷 open | `CIRCUIT_OPEN`, 그룹 서버 호출 0회, 즉시 실패 |
-| 동시 상한 초과 (상한 1) | `CONCURRENCY_REJECTED`, 100ms 미만 |
+| 동시 상한 초과 (상한 1) | `CONCURRENCY_REJECTED`, 즉시 (테스트 상한 500ms) |
 | 연결 거부 | `CONNECT_TIMEOUT`, 2회 시도 |
 
 ### 잘못된 요청은 외부 호출 전에 차단
@@ -239,7 +240,7 @@ finally: release()
 | 지표 (Prometheus 이름) | 의미 |
 |---|---|
 | `http_server_requests_seconds_*{uri,status}` | 인바운드 요청 (자동) |
-| `http_client_requests_seconds_*{uri,status}` | 그룹 서비스로 보낸 **HTTP 시도 1회** 단위 (자동, histogram) |
+| `http_client_requests_seconds_*{uri,status}` | 그룹 서비스로 보낸 **HTTP 시도 1회** 단위 (자동, histogram). `uri`는 쿼리 문자열을 뺀 경로(`/api/groups/summary`, `/api/group`)다 |
 | `group_call_duration_seconds_*{outcome}` | 재시도를 포함한 **Gateway 호출 전체** 시간. `outcome` = `success` 또는 stage (histogram) |
 | `group_call_failures_total{stage}` | 실패 stage별 건수 |
 | `group_call_permits_in_use` | 동시 호출 슬롯 사용량 |
@@ -267,6 +268,8 @@ histogram_quantile(0.99,
 
 원인을 볼 때는 `sum by (stage) (rate(group_call_failures_total[5m]))`로 실패 stage 분포를 확인한다.
 
+**`uri` 태그 카디널리티**: `GroupApi`의 `@RequestParam memberIds: List<String>`은 원소마다 URI 템플릿 변수로 펼쳐진다. 기본 설정이면 client `uri` 태그가 `/api/groups/summary?{queryParam-memberIds}={queryParam-memberIds[0]}&…`가 되어 배치 크기(1..100)마다 시계열이 따로 생기고, histogram bucket 수만큼 곱해진다. member-service는 `DefaultClientRequestObservationConvention`을 확장해 `?` 뒤를 잘라낸 `ClientRequestObservationConvention` bean을 둔다. Boot의 RestClient observation customizer가 이 bean을 쓰고, 그 customizer는 HTTP Service Client 그룹의 RestClient에도 적용된다. 테스트로 배치 크기가 다른 호출 뒤 `uri="/api/groups/summary"`만 남는 것을 확인한다.
+
 ## 8. 해석한 요구사항과 판단 목록
 
 과제 문서에 명시되지 않아 해석이 필요했던 부분과, 설계 중에 내린 판단이다.
@@ -279,7 +282,7 @@ histogram_quantile(0.99,
 4. keyset 조건은 HQL 튜플 비교 `(m.name, m.registeredAt, m.id) > (:name, :registeredAt, :id)`로 썼다. Hibernate 7.4 + PostgreSQL에서 그대로 동작하는 것을 확인해서, 대안으로 준비했던 Spring Data `Window`/`ScrollPosition`(OR로 풀린 조건)은 쓰지 않았다. 동명이인 + 동일 가입 시각 데이터로 asc/desc 각각 offset과 cursor 전체 순회 시 누락과 중복이 없음을 테스트했다.
 5. 멤버 상세의 `group.registeredDate`는 "멤버가 그룹에 추가된 시각"이다. 그룹 상세 API가 주는 값을 그대로 쓴다. 그룹 생성일은 계약에 없으므로 이렇게 해석했다.
 6. 그룹 요약의 `totalMemberCount`는 그룹 **전체** 멤버 수이고, `members`는 요청한 ID 중 그 그룹 소속인 멤버만 담는다. 그룹이 없는 ID는 오류가 아니라 응답에서 빠진다. `memberIds`는 1..100개(member 페이지 크기 상한과 같음)이고 중복은 제거한다.
-7. 멤버 ID 형식(`^[a-z0-9]{10}$`)을 양쪽 서비스 입구에서 검증한다. 형식이 틀리면 DB나 그룹 서비스를 호출하지 않고 400을 준다.
+7. 멤버 ID 형식(`^[a-z0-9]{10}$`)을 양쪽 서비스 입구에서 검증한다. 형식이 틀리면 DB나 그룹 서비스를 호출하지 않고 400을 준다. DB에도 같은 정규식의 check 제약을 둔다(`members.id`, `groups.id`, `group_members.member_id`).
 8. 멤버가 없으면 404 `MEMBER_NOT_FOUND`이고, 이때 그룹 서비스는 호출하지 않는다.
 9. DB는 서비스별로 분리했다(member-db, group-db). 두 시드의 멤버 ID 50개는 일치시켰고, 그중 5개는 그룹이 없다. 시드에는 동명이인 + 동일 가입 시각, 3가지 pricing, 3가지 permission을 포함했다.
 10. Flyway 위치를 `db/migration`(스키마)과 `db/seed`(샘플)로 나눴다. 기본 프로필은 둘 다, `prod`는 스키마만 적용한다.

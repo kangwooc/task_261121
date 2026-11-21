@@ -8,13 +8,18 @@ import dev.task.group.query.GetGroupSummariesQuery
 import dev.task.group.query.GetMemberGroupDetailHandler
 import dev.task.group.query.MemberGroupNotFoundException
 import io.swagger.v3.oas.annotations.Operation
+import io.swagger.v3.oas.annotations.media.Content
+import io.swagger.v3.oas.annotations.media.Schema
 import io.swagger.v3.oas.annotations.responses.ApiResponse
 import io.swagger.v3.oas.annotations.responses.ApiResponses
 import io.swagger.v3.oas.annotations.tags.Tag
+import org.springframework.http.ProblemDetail
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 
 // OpenAPI annotations live here, not on GroupApi: the contract module stays free of Spring Boot/springdoc.
+private const val PROBLEM_JSON = "application/problem+json"
+
 @Tag(name = "groups", description = "그룹 조회 (내부 전용)")
 @RestController
 class GroupController(
@@ -28,7 +33,10 @@ class GroupController(
     )
     @ApiResponses(
         ApiResponse(responseCode = "200", description = "성공"),
-        ApiResponse(responseCode = "400", description = "memberIds 비었음/100개 초과/형식 오류 (code=INVALID_REQUEST)"),
+        ApiResponse(
+            responseCode = "400", description = "memberIds 비었음/100개 초과/형식 오류 (code=INVALID_REQUEST)",
+            content = [Content(mediaType = PROBLEM_JSON, schema = Schema(implementation = ProblemDetail::class))],
+        ),
     )
     override fun getGroupSummaries(@RequestParam memberIds: List<String>): GroupSummaryResponse =
         summaries.handle(GetGroupSummariesQuery(memberIds.toSet()))
@@ -36,8 +44,14 @@ class GroupController(
     @Operation(summary = "멤버의 그룹 상세", description = "registeredDate = 멤버가 그룹에 추가된 시각.")
     @ApiResponses(
         ApiResponse(responseCode = "200", description = "성공"),
-        ApiResponse(responseCode = "400", description = "memberId 형식 오류 (code=INVALID_REQUEST)"),
-        ApiResponse(responseCode = "404", description = "소속 그룹 없음 (code=MEMBER_GROUP_NOT_FOUND)"),
+        ApiResponse(
+            responseCode = "400", description = "memberId 형식 오류 (code=INVALID_REQUEST)",
+            content = [Content(mediaType = PROBLEM_JSON, schema = Schema(implementation = ProblemDetail::class))],
+        ),
+        ApiResponse(
+            responseCode = "404", description = "소속 그룹 없음 (code=MEMBER_GROUP_NOT_FOUND)",
+            content = [Content(mediaType = PROBLEM_JSON, schema = Schema(implementation = ProblemDetail::class))],
+        ),
     )
     override fun getMemberGroup(@RequestParam memberId: String): MemberGroupDetailResponse =
         detail.handle(memberId) ?: throw MemberGroupNotFoundException(memberId)
