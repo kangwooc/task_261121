@@ -4,6 +4,7 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-flyway")
     implementation("org.flywaydb:flyway-database-postgresql")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
+    implementation(libs.springdoc.webmvc.ui)
     implementation("org.springframework.boot:spring-boot-micrometer-tracing-brave")
     implementation("io.micrometer:micrometer-tracing-bridge-brave")
     implementation("io.micrometer:micrometer-registry-prometheus")

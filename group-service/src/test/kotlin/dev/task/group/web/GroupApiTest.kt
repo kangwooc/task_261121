@@ -118,6 +118,13 @@ class GroupApiTest {
     }
 
     @Test
+    fun openApiDocIsServed() {
+        val body = mapper.readTree(RestClient.create("http://127.0.0.1:$port").get().uri("/v3/api-docs").retrieve().body(String::class.java))
+        assertTrue(body["paths"].has("/api/groups/summary"))
+        assertTrue(body["paths"].has("/api/group"))
+    }
+
+    @Test
     fun controllerImplementsContract() {
         assertTrue(GroupApi::class.java.isAssignableFrom(GroupController::class.java))
     }

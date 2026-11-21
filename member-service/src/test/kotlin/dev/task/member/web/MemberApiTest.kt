@@ -212,6 +212,14 @@ class MemberApiTest {
     }
 
     @Test
+    fun openApiDocIsServed() {
+        val (status, body) = get("/v3/api-docs")
+        assertEquals(200, status)
+        assertTrue(body["paths"].has("/api/members"))
+        assertTrue(body["paths"].has("/api/member/{memberId}"))
+    }
+
+    @Test
     fun postIs405ProblemJson() {
         val r = client.post().uri("/api/members").retrieve().toEntity(String::class.java)
         assertEquals(405, r.statusCode.value())
