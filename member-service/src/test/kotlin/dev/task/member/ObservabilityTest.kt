@@ -98,13 +98,20 @@ class ObservabilityTest {
 
     @Test
     fun prometheusExposesGatewayMetrics() {
-        server.enqueue(json(200, """{"groups":[]}"""))
-        client.get().uri("http://localhost:$port/api/members?size=1").retrieve().toBodilessEntity()
+        // Different page sizes = different memberIds batch sizes; the uri tag must not vary with them.
+        listOf(1, 3).forEach {
+            server.enqueue(json(200, """{"groups":[]}"""))
+            client.get().uri("http://localhost:$port/api/members?size=$it").retrieve().toBodilessEntity()
+        }
         server.enqueue(json(503, "{}")); server.enqueue(json(503, "{}"))
         client.get().uri("http://localhost:$port/api/members?size=1").retrieve().toBodilessEntity()
         val body = client.get().uri("http://127.0.0.1:$mgmtPort/actuator/prometheus").retrieve().body(String::class.java)!!
         listOf("group_call_failures_total", "group_call_duration_seconds_bucket", "resilience4j_circuitbreaker_state")
             .forEach { assertTrue(it in body, "$it missing") }
+        val clientSeries = body.lines().filter { it.startsWith("http_client_requests_seconds_count") }
+        assertTrue(clientSeries.any { """uri="/api/groups/summary"""" in it }, "client uri tag missing: $clientSeries")
+        val leaked = body.lines().filter { Regex("""uri="[^"]*queryParam""").containsMatchIn(it) }
+        assertTrue(leaked.isEmpty(), "query template vars in uri tag: ${leaked.take(2)}")
     }
 
     @Test
