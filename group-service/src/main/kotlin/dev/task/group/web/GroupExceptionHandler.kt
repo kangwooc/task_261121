@@ -5,6 +5,7 @@ import dev.task.group.query.MemberGroupNotFoundException
 import org.springframework.http.HttpStatus
 import org.springframework.http.ProblemDetail
 import org.springframework.http.ResponseEntity
+import io.micrometer.tracing.Tracer
 import org.slf4j.LoggerFactory
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatusCode
@@ -14,8 +15,9 @@ import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
 
 @RestControllerAdvice
-class GroupExceptionHandler : ResponseEntityExceptionHandler() {
+class GroupExceptionHandler(private val tracer: Tracer) : ResponseEntityExceptionHandler() {
     private val log = LoggerFactory.getLogger(javaClass)
+    private fun traceId() = tracer.currentSpan()?.context()?.traceId()
 
     @ExceptionHandler(InvalidRequestException::class)
     fun invalid(e: InvalidRequestException) = problem(HttpStatus.BAD_REQUEST, "INVALID_REQUEST", e.message)
@@ -27,7 +29,7 @@ class GroupExceptionHandler : ResponseEntityExceptionHandler() {
         val pd = (body as? ProblemDetail) ?: ProblemDetail.forStatus(statusCode)
         val s = statusCode.value()
         pd.setProperty("code", when { s == 404 -> "NOT_FOUND"; s == 405 -> "METHOD_NOT_ALLOWED"; s in 400..499 -> "INVALID_REQUEST"; else -> "HTTP_$s" })
-        pd.setProperty("traceId", null) // Task 7 fills this
+        pd.setProperty("traceId", traceId())
         return super.handleExceptionInternal(ex, pd, headers, statusCode, request)
     }
 
@@ -40,6 +42,6 @@ class GroupExceptionHandler : ResponseEntityExceptionHandler() {
     private fun problem(status: HttpStatus, code: String, detail: String?) =
         ProblemDetail.forStatusAndDetail(status, detail ?: status.reasonPhrase).apply {
             setProperty("code", code)
-            setProperty("traceId", null) // Task 7 fills this
+            setProperty("traceId", traceId())
         }
 }
